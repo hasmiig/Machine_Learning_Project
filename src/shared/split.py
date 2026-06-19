@@ -9,12 +9,6 @@ def get_train_test_split(
     random_state: int = 42,
 ):
     """Return train and test subsets of df, split on listing ID.
-
-    ALL THREE team members (tabular, text, image) must call this exact
-    function with the same arguments so that every modality trains and
-    evaluates on an identical set of listings. The split is deterministic:
-    given the same df and random_state it always produces the same partition.
-
     Parameters
     ----------
     df : pd.DataFrame

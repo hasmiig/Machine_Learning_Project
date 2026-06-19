@@ -1,4 +1,4 @@
-# Madrid Airbnb Price Prediction
+# Seattle Airbnb Price Prediction
 
 ML course project — predicting nightly prices for Seattle Airbnb listings using the
 [Inside Airbnb](http://insideairbnb.com/get-the-data/) dataset. The model is built

@@ -13,8 +13,6 @@ Each transformation is a small private helper so that individual steps are
 independently testable.  Design decisions come from the first-pass exploration
 in ``notebooks/tabular_explore.ipynb``; key choices are:
 
-- Flag Hotel room listings with ``is_hotel_room`` rather than treating them
-  identically to residential STRs.
 - Clip maximum_nights, bedrooms, bathrooms, estimated_revenue_l365d, and
   reviews_per_month at their train-set 99.9th percentile to remove implausible
   extreme values without losing rows.  Clip thresholds are computed from
@@ -66,13 +64,12 @@ def _clip_outliers(df: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
 # ── Step 2 — hotel room flag ─────────────────────────────────────────────────
 
 def _add_hotel_room_flag(df: pd.DataFrame) -> pd.DataFrame:
-    """Add is_hotel_room binary flag (1 = Hotel room, 0 = residential STR).
+    """Add is_hotel_room binary flag — created here and dropped in step 17.
 
-    Hotel rooms follow block/hotel pricing (median ~$40k in Seattle) rather than
-    nightly STR pricing.  The flag lets the model learn the price discontinuity
-    explicitly.  ``room_type`` already encodes the same information as a category;
-    the flag makes it available as a numeric feature without needing to encode
-    room_type first.
+    Person B's common.py caps prices at the 99th percentile (~$1,717), which
+    excludes all 51 hotel-room listings (~$40k), so is_hotel_room is always 0
+    in both train and test (zero variance).  The flag is listed in _COLS_TO_DROP
+    and removed before any model sees it.
     """
     if "room_type" in df.columns:
         df["is_hotel_room"] = (df["room_type"] == "Hotel room").astype(int)
@@ -352,6 +349,10 @@ def _bucket_property_type(
 _COLS_TO_DROP = [
     # target — use log_price from common.load_target() instead
     "price",
+    # zero-variance in the modeling split: Person B's common.py caps prices at
+    # the 99th percentile (~$1,717), which excludes all 51 hotel-room listings
+    # (~$40,000). is_hotel_room is therefore always 0 in both train and test.
+    "is_hotel_room",
     # min-nights redundant cluster — keep minimum_nights
     "minimum_minimum_nights",
     "minimum_nights_avg_ntm",

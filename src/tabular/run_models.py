@@ -4,8 +4,12 @@ Train and evaluate all four tabular models on the Seattle Airbnb dataset.
 Output
 ------
   Console  — per-model RMSE (log-price and dollar), summary table, best alpha
-  data/processed/tabular_preds_test.csv   — id + log_price_pred  (LightGBM)
-  data/processed/tabular_preds_train.csv  — id + log_price_pred  (LightGBM)
+  data/processed/tabular_preds_test.csv      — id, log_price_actual, log_price_pred, price_actual, price_pred  (LightGBM)
+  data/processed/tabular_preds_train.csv     — id, log_price_actual, log_price_pred, price_actual, price_pred  (LightGBM)
+  models/tabular/sklearn/dummy.joblib
+  models/tabular/sklearn/ridge.joblib
+  models/tabular/sklearn/random_forest.joblib
+  models/tabular/sklearn/lightgbm.joblib
 
 Run from the project root:
     python src/tabular/run_models.py
@@ -14,6 +18,7 @@ Run from the project root:
 import sys
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -95,29 +100,55 @@ def main():
         pd.DataFrame(results)
         .set_index("model")
         .rename(columns={
-            "train_rmse_log": "train RMSE (log)",
-            "test_rmse_log":  "test RMSE (log)",
-            "train_rmse_dollar": "train RMSE ($)",
-            "test_rmse_dollar":  "test RMSE ($)",
+            "test_rmse_log":         "RMSE (log)",
+            "test_mae_log":          "MAE (log)",
+            "test_r2":               "R²",
+            "test_rmse_dollar":      "RMSE ($)",
+            "test_mae_dollar":       "MAE ($)",
+            "test_median_ae_dollar": "MedAE ($)",
+            "test_mape":             "MAPE (%)",
         })
     )
-    print("\n\n── Summary " + "─" * 61)
-    print(summary.to_string(float_format=lambda x: f"{x:,.4f}" if x < 10 else f"${x:,.0f}"))
+    test_cols = ["RMSE (log)", "MAE (log)", "R²", "RMSE ($)", "MAE ($)", "MedAE ($)", "MAPE (%)"]
+    print("\n\n── Test-set summary " + "─" * 52)
+    print(summary[test_cols].to_string(
+        float_format=lambda x: f"{x:,.4f}" if abs(x) < 10 else f"{x:,.1f}" if abs(x) < 1000 else f"{x:,.0f}"
+    ))
 
-    # ── Save LightGBM predictions ──────────────────────────────────────────────
+    # ── Save LightGBM predictions (log, dollar, and actual price) ─────────────
     out_dir = _ROOT / "data/processed"
+    test_log_pred  = lgbm.predict(X_test)
+    train_log_pred = lgbm.predict(X_train)
+
     pd.DataFrame({
-        "id":             X_test["id"].values,
-        "log_price_pred": lgbm.predict(X_test),
+        "id":              X_test["id"].values,
+        "log_price_actual": y_test.values,
+        "log_price_pred":   test_log_pred,
+        "price_actual":     np.exp(y_test.values),
+        "price_pred":       np.exp(test_log_pred),
     }).to_csv(out_dir / "tabular_preds_test.csv", index=False)
 
     pd.DataFrame({
-        "id":             X_train["id"].values,
-        "log_price_pred": lgbm.predict(X_train),
+        "id":              X_train["id"].values,
+        "log_price_actual": y_train.values,
+        "log_price_pred":   train_log_pred,
+        "price_actual":     np.exp(y_train.values),
+        "price_pred":       np.exp(train_log_pred),
     }).to_csv(out_dir / "tabular_preds_train.csv", index=False)
 
-    print(f"\nSaved  tabular_preds_test.csv   ({len(X_test):,} rows)")
-    print(f"Saved  tabular_preds_train.csv  ({len(X_train):,} rows)")
+    print(f"\nSaved  tabular_preds_test.csv   ({len(X_test):,} rows)  [id, log_price_actual, log_price_pred, price_actual, price_pred]")
+    print(f"Saved  tabular_preds_train.csv  ({len(X_train):,} rows)  [id, log_price_actual, log_price_pred, price_actual, price_pred]")
+
+    # ── Save all sklearn models ────────────────────────────────────────────────
+    models_dir = _ROOT / "models" / "tabular" / "sklearn"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(dummy, models_dir / "dummy.joblib")
+    joblib.dump(ridge, models_dir / "ridge.joblib")
+    joblib.dump(rf,    models_dir / "random_forest.joblib")
+    joblib.dump(lgbm,  models_dir / "lightgbm.joblib")
+    print(f"\nSaved sklearn models → {models_dir}")
+    for f in sorted(models_dir.glob("*.joblib")):
+        print(f"  {f.name}  ({f.stat().st_size / 1e6:.1f} MB)")
 
     # ── Top-20 LightGBM feature importances ───────────────────────────────────
     imp = pd.Series(

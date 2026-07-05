@@ -112,12 +112,32 @@ def evaluate(
     y_pred: np.ndarray,
     label: str = "",
 ) -> dict:
-    """Print and return RMSE in log-price space and dollar space."""
-    rmse_log = float(np.sqrt(np.mean((y_true.values - y_pred) ** 2)))
-    rmse_dollar = float(np.sqrt(np.mean((np.exp(y_true.values) - np.exp(y_pred)) ** 2)))
+    """Print and return regression metrics in log-price and dollar space."""
+    y_t = y_true.values if hasattr(y_true, "values") else np.asarray(y_true)
+    y_p = np.asarray(y_pred)
+
+    rmse_log = float(np.sqrt(np.mean((y_t - y_p) ** 2)))
+    mae_log  = float(np.mean(np.abs(y_t - y_p)))
+    ss_res   = np.sum((y_t - y_p) ** 2)
+    ss_tot   = np.sum((y_t - y_t.mean()) ** 2)
+    r2       = float(1 - ss_res / ss_tot)
+
+    p_t = np.exp(y_t)
+    p_p = np.exp(y_p)
+    rmse_dollar      = float(np.sqrt(np.mean((p_t - p_p) ** 2)))
+    mae_dollar       = float(np.mean(np.abs(p_t - p_p)))
+    median_ae_dollar = float(np.median(np.abs(p_t - p_p)))
+    mape             = float(np.mean(np.abs((p_t - p_p) / p_t)) * 100)
+
     prefix = f"[{label}]" if label else ""
-    print(f"{prefix:<22}  RMSE log={rmse_log:.4f}   RMSE $={rmse_dollar:>10,.0f}")
-    return {"rmse_log": rmse_log, "rmse_dollar": rmse_dollar}
+    print(f"{prefix:<22}  RMSE log={rmse_log:.4f}  MAE log={mae_log:.4f}  R²={r2:.4f}")
+    print(f"{'':22}  RMSE $={rmse_dollar:>10,.0f}  MAE $={mae_dollar:>10,.0f}  "
+          f"MedAE $={median_ae_dollar:>10,.0f}  MAPE={mape:.1f}%")
+    return {
+        "rmse_log": rmse_log, "mae_log": mae_log, "r2": r2,
+        "rmse_dollar": rmse_dollar, "mae_dollar": mae_dollar,
+        "median_ae_dollar": median_ae_dollar, "mape": mape,
+    }
 
 
 # ── 1. Dummy ───────────────────────────────────────────────────────────────────

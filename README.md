@@ -38,26 +38,29 @@ project/
 ├── data/
 │   ├── raw/            # listings.csv, calendar.csv, neighbourhoods.csv, target.csv,
 │   │                    # train_ids.npy / test_ids.npy (not committed)
-│   └── processed/       # engineered tabular features, predictions, embeddings (not committed)
+│   └── processed/       # tabular_features/train/test.csv — save_features.py output (not committed)
 ├── src/
 │   ├── shared/
 │   │   ├── common.py               # target + fixed train/test split, used by every modality
 │   │   ├── prepare_features.ipynb  # builds the shared multimodal feature bundle
-│   │   └── model_training.ipynb    # FUSION: early-fusion grid + late-fusion stacking
+│   │   └── model_training.ipynb    # THE MAIN MODEL: early-fusion grid + late-fusion stacking
 │   ├── tabular/
-│   │   ├── clean.py, features.py, save_features.py    # cleaning + feature pipeline
-│   │   ├── model.py, run_models.py                     # Dummy / Ridge / Random Forest / LightGBM
-│   │   ├── torch_models.py, run_torch_models.py        # Linear / MLP / ResNet, expose .encode()
-│   │   ├── tabular_explore.ipynb, tabular_models.ipynb, torch_models.ipynb
-│   │   └── models/{sklearn,torch}/                     # saved model artifacts
+│   │   ├── clean.py, features.py, save_features.py    # cleaning + 17-step feature pipeline
+│   │   └── tabular_explore.ipynb                       # EDA only — no standalone tabular models here
 │   ├── text/
 │   │   └── text_features.ipynb     # TF-IDF + sentence-embedding pipeline
 │   └── images/
 │       ├── Images_availability.ipynb  # photo-availability check
 │       ├── Images_ResNet2.ipynb       # ResNet50 regressor + embedding extraction
 │       └── Grad_cam.ipynb             # Grad-CAM interpretability check
-└── reports/             # earlier process reports; superseded by this README
 ```
+
+Note: earlier drafts of this project trained standalone per-modality models (a tabular-only
+sklearn/PyTorch pipeline, separate from fusion) to sanity-check that each modality carried real
+signal before fusing. Those standalone tabular model scripts/notebooks have since been removed —
+they were exploratory scaffolding, not the deliverable. The single-modality numbers you still see
+below (e.g. "tabular alone") now come directly from `model_training.ipynb`, which tests every
+feature set — including each modality alone — as part of the same fusion grid.
 
 ## Pipeline overview
 
@@ -88,9 +91,12 @@ Shared Airbnb listings
 bedrooms, host-profile fields; parse amenities into a count + 6 binary flags; derive
 `years_as_host`; bucket host-listing counts and property types; drop 30+ redundant, correlated,
 or URL/metadata columns. All statistics (clip thresholds, medians, category frequencies) are
-fit on train rows only. **Note:** `estimated_revenue_l365d` — Inside Airbnb's own
-price × occupancy column — is deliberately dropped as a target leak; keeping it inflates
-LightGBM R² from 0.746 to 0.871.
+fit on train rows only. Output: `tabular_train.csv` / `tabular_test.csv` (49 features, 0 NaNs) —
+still contains raw category columns (`room_type`, `neighbourhood_cleansed`, ...), which
+`prepare_features.ipynb` (below) converts to pure numbers for fusion. **Note:**
+`estimated_revenue_l365d` — Inside Airbnb's own price × occupancy column — is deliberately
+dropped as a target leak; keeping it inflates tabular R² from 0.745 to 0.871 in a controlled
+comparison (see `prepare_features.ipynb`).
 
 **Text** (`src/text/text_features.ipynb`) — one row per listing: `name + description`, plus
 reviews aggregated per listing (most recent 30, never crossing the train/test boundary; 722
@@ -112,14 +118,17 @@ tabular → 152 dims, text → 100 dims (TruncatedSVD, 78.8% variance retained),
 
 ## Results
 
-### Standalone modality strength (best model per modality)
+### Single-modality strength (from the fusion grid, one modality at a time)
 
 | Modality | Best model | Test R² |
 |---|---|---|
-| Tabular | LightGBM | 0.746 (own pipeline) / 0.742 (fusion re-encoding) |
+| Tabular | XGBoost | 0.742 |
 | Text | MLP | 0.608 |
 | Image | Random Forest / XGBoost | 0.250 |
 | Dummy | — | -0.004 |
+
+These come straight out of `model_training.ipynb`'s grid (the "tabular", "text", "image" rows of
+the table below) — there's no separate standalone-model codebase behind them anymore.
 
 
 ### Early fusion — feature concatenation (test R²)
@@ -174,20 +183,22 @@ than an artifact of one method.
 
 ## Reproducibility
 
-The tabular pipeline runs locally end-to-end from the project root:
+The tabular *feature* pipeline runs locally end-to-end from the project root:
 
 ```bash
 python src/tabular/save_features.py
-python src/tabular/run_models.py
-python src/tabular/run_torch_models.py
 ```
 
-then re-run `tabular_explore.ipynb`, `tabular_models.ipynb`, and `torch_models.ipynb` to
-regenerate the analysis notebooks.
+This produces `tabular_features.csv` / `tabular_train.csv` / `tabular_test.csv` in
+`data/processed/`. Re-run `tabular_explore.ipynb` afterwards to regenerate the EDA notebook
+against them. No models are trained locally at this stage — this step only produces clean,
+engineered features.
 
-The text, image, and fusion notebooks (`src/text/text_features.ipynb`, `src/images/*.ipynb`,
-`src/shared/prepare_features.ipynb`, `src/shared/model_training.ipynb`) were developed in
-Google Colab against a shared Google Drive folder — `common.py`'s `DATA_DIR` points at that
-Drive path. To run them locally, point `DATA_DIR` at `data/raw/` instead; otherwise, their
-baked-in notebook outputs are the source of truth for the results reported above.
+All actual modeling — the single-modality baselines, the 7×7 fusion grid, and the stacking
+model — lives in `src/shared/prepare_features.ipynb` and `src/shared/model_training.ipynb`.
+These were developed in Google Colab against a shared Google Drive folder — `common.py`'s
+`DATA_DIR` points at that Drive path, as do the text (`src/text/text_features.ipynb`) and image
+(`src/images/*.ipynb`) notebooks. To run any of them locally, point `DATA_DIR` at `data/raw/`
+instead; otherwise, their baked-in notebook outputs are the source of truth for the results
+reported above.
 

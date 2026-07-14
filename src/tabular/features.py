@@ -13,10 +13,14 @@ Each transformation is a small private helper so that individual steps are
 independently testable.  Design decisions come from the first-pass exploration
 in ``notebooks/tabular_explore.ipynb``; key choices are:
 
-- Clip maximum_nights, bedrooms, bathrooms, estimated_revenue_l365d, and
-  reviews_per_month at their train-set 99.9th percentile to remove implausible
-  extreme values without losing rows.  Clip thresholds are computed from
-  training rows only to prevent test leakage.
+- Clip maximum_nights, bedrooms, bathrooms, and reviews_per_month at their
+  train-set 99.9th percentile to remove implausible extreme values without
+  losing rows.  Clip thresholds are computed from training rows only to
+  prevent test leakage.
+- Drop estimated_revenue_l365d entirely (step 17): Inside Airbnb derives this
+  column from price x occupancy, so it is a target leak.  A controlled
+  comparison (src/prepare_features.ipynb, the fusion team's independent
+  re-encoding) showed keeping it inflates tabular R2 from 0.745 to 0.871.
 - Recover ``bathrooms`` from ``bathrooms_text`` (10.1% vs 0.2% missing).
 - Leave categorical columns as clean strings — one-hot / target encoding
   happens separately, right before model training, not here.
@@ -46,7 +50,6 @@ def _clip_outliers(df: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
         "maximum_nights",
         "bedrooms",
         "bathrooms",
-        "estimated_revenue_l365d",
         "reviews_per_month",
     ]
     for col in clip_cols:
@@ -353,6 +356,10 @@ _COLS_TO_DROP = [
     # the 99th percentile (~$1,717), which excludes all 51 hotel-room listings
     # (~$40,000). is_hotel_room is therefore always 0 in both train and test.
     "is_hotel_room",
+    # TARGET LEAK — Inside Airbnb derives this column from price x occupancy.
+    # Caught by the fusion team's independent re-encoding (src/prepare_features.ipynb):
+    # keeping it inflated tabular R2 from 0.745 to 0.871.
+    "estimated_revenue_l365d",
     # min-nights redundant cluster — keep minimum_nights
     "minimum_minimum_nights",
     "minimum_nights_avg_ntm",

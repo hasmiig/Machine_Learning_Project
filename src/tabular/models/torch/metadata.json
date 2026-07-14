@@ -1,0 +1,26 @@
+{
+  "n_features": 158,
+  "LinearTabular": {},
+  "MLPTabular": {
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "dropout": 0.2
+  },
+  "ResNetTabular": {
+    "d_model": 128,
+    "n_blocks": 4,
+    "dropout": 0.15
+  },
+  "MLPTabular_tuned": {
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "dropout": 0.2,
+    "_note": "patience=20, epochs=150, weight_decay=1e-4"
+  }
+}
